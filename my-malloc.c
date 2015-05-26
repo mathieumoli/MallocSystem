@@ -5,7 +5,9 @@
 #include <strings.h>
 #include "my-malloc.h"
 
-#define MOST_RESTRICTING_TYPE double 
+#define MOST_RESTRICTING_TYPE double
+#define SIZE_FOR_SBRK 800 
+
 // la taille est 16
 #define HEADER_SIZE sizeof(union header)
 
@@ -23,19 +25,40 @@ typedef union header {
 
 static void*freelist = NULL;
 
-static int placeReserve=0;
-static void*adressePlaceRes=NULL;
 
 
 void creationHeader(void* adresse,size_t size){
-	Header newBlock;
-	newBlock=adresse;
+	Header newBlock=adresse;
 	newBlock->info.size=size;
 	newBlock->info.next=NULL;
+	fprintf(stderr, "Block Alloué @0x%d (size=%d, next 0x%d)\n", newBlock, newBlock->info.size, newBlock->info.next);
+
 }
 
 void fusionBlocs(){
+	Header headerCourant=freelist;
 
+	Header headerSuivant=headerCourant->info.next;
+	void * adresseCourant;
+	void * adFreelist=freelist;
+	 			void * next;
+
+	do{
+                adresseCourant = headerCourant;
+                while((adresseCourant+HEADER_SIZE+headerCourant->info.size)==headerSuivant){
+                        headerCourant->info.size+=HEADER_SIZE+headerSuivant->info.size;
+                        headerCourant->info.next=headerSuivant->info.next;
+                        headerSuivant=headerSuivant->info.next;
+                        //printf("into the while %d",headerCourant->info.size);
+                }
+                headerCourant=headerSuivant;
+          //fprintf(stderr, "Block @0x%d (size=%d, next 0x%d)\n", headerCourant, headerCourant->info.size, headerCourant->info.next);
+          //fprintf(stderr, "Freelist @0x%d\n", freelist);
+
+                headerSuivant=headerSuivant->info.next;
+                next=headerCourant->info.next;
+                
+        }while(next!=adFreelist);
 }
 
 void * couper(Header theheader,size_t size){
@@ -43,9 +66,13 @@ void * couper(Header theheader,size_t size){
 	unsigned int tailleBloc=theheader->info.size;
 	int tailleNouveauBlocVide=tailleBloc-(size+HEADER_SIZE);
 	theheader->info.size=tailleNouveauBlocVide;
+	fprintf(stderr, "Block @0x%d (Nouvelle Size=%d , Ancienne Size=%d, next 0x%d)\n", theheader, theheader->info.size,tailleBloc, theheader->info.next);
+
 	//pointeur vers la nouvelle source avec la metadonnée
-	void * pointeur=theheader+HEADER_SIZE+tailleNouveauBlocVide;
+	void * adresseHeader=theheader;
+	void * pointeur=adresseHeader+HEADER_SIZE+tailleNouveauBlocVide;
 	creationHeader(pointeur,size);
+
 	return pointeur;
 
 }
@@ -70,7 +97,7 @@ void* searchinfreelist(size_t size){
 			// je considere que si la taille n'est pas superieur à la taille demandée
 			// + 2 header je lui donne car sinon le bloc ne sera jamais utilisé et donc inutile
 			if(headerCourant->info.size>=(size+HEADER_SIZE+16)){
-				//printf("je decoupe la case est assez grande\n");
+				printf("je decoupe la case est assez grande\n");
 				freeAssezGrand=couper(headerCourant,size);
 				return freeAssezGrand;
 			}
@@ -120,6 +147,8 @@ void* searchinfreelist(size_t size){
  */
  void *mymalloc(size_t size)
  {
+ 	static int placeReserve=0;
+	static void*adressePlaceRes=NULL;
 
  	void *  nouvelleAdresse=NULL;
  	void * adresseSansMeta=NULL;
@@ -140,43 +169,46 @@ void* searchinfreelist(size_t size){
  	if(adressePlaceRes==NULL){
  	//	printf("dans AdressePlaceRes\n" );
  		adressePlaceRes=sbrk(0);
- 		if(sbrk(800) ==((void*)-1)){
+ 		if(sbrk(SIZE_FOR_SBRK) ==((void*)-1)){
 		// on renvoit un NULL
+ 			printf("premier sbrk mort");
  			return NULL;
  		}
  		
  		nb_sbrk++;
- 		placeReserve=800;
+ 		placeReserve=SIZE_FOR_SBRK;
  	}
  //	printf("je passe dans un second implement\n" );
 		// pas assez de place un sbrk a faire
  	if(placeReserve<(HEADER_SIZE+size)){
  		//printf("pas assez de place\n" );
 
- 		if(sbrk(size+HEADER_SIZE) ==((void*)-1)){
+ 		if(sbrk(SIZE_FOR_SBRK) ==((void*)-1)){
+ 			 printf("second sbrk mort");
+
 		// on renvoit un NULL
  			return NULL;
  		}
  		nb_sbrk++;
- 		placeReserve=0;
- 		nouvelleAdresse=adressePlaceRes;
- 		creationHeader(nouvelleAdresse,size);
-		//je me place après tout
- 		adressePlaceRes=sbrk(0);
- 		adresseSansMeta=nouvelleAdresse+HEADER_SIZE;
- 		return adresseSansMeta;
+ 		placeReserve+=SIZE_FOR_SBRK;
+ 	// 	nouvelleAdresse=adressePlaceRes;
+ 	// 	creationHeader(nouvelleAdresse,size);
+		// //je me place après tout
+ 	// 	adressePlaceRes=sbrk(0);
+ 	// 	adresseSansMeta=nouvelleAdresse+HEADER_SIZE;
+ 	// 	return adresseSansMeta;
 		//assez de place 
- 	}else{
+ 	}
  		//printf("assez de place\n" );
 
  		placeReserve-=(HEADER_SIZE+size);
  		nouvelleAdresse=adressePlaceRes;
  		creationHeader(nouvelleAdresse,size);
- 		adressePlaceRes=adressePlaceRes+HEADER_SIZE+size;
+ 		adressePlaceRes+=(HEADER_SIZE+size);
  		adresseSansMeta=nouvelleAdresse+HEADER_SIZE;
  		return adresseSansMeta;
 
- 	}
+ 	
  }
 
 /**
@@ -208,6 +240,25 @@ void* searchinfreelist(size_t size){
 		//chercher le bloc inferieur le plus proche
 		//initialisation
  		Header headerCourant=freelist;
+ 		//cas premier dans la liste
+ 		if(headerCourant>aLiberer){
+ 			freelist=aLiberer;
+ 			aLiberer->info.next=headerCourant;
+ 			if(headerCourant->info.next==headerCourant){
+ 				headerCourant->info.next=freelist;
+ 			}else{
+ 			Header headerPrecedent=headerCourant;
+ 			void * next= headerPrecedent->info.next;
+ 			
+ 		while(next!=headerCourant){
+		headerPrecedent=headerPrecedent->info.next;
+		next=headerPrecedent->info.next;
+		}
+
+		headerPrecedent->info.next=freelist;
+		}
+
+ 		}else{
  		Header headerSuivant=headerCourant->info.next;
  		do{
 			//si on est au bon endroit
@@ -232,9 +283,11 @@ void* searchinfreelist(size_t size){
 			//printf("je suis le dernier donc je passe pas par la double condition\n");
 
 		}
-
+}
 		//verifier pour fusionner les blocs
 		fusionBlocs();
+		Header courant=freelist;
+		//printf("taille du premier bloc:%d\n",courant->info.size);
 
 	}
 	//if(aLiberer->info.next==freelist)
@@ -288,10 +341,24 @@ void *myrealloc(void *ptr, size_t size)
 
 #ifdef MALLOC_DBG
 void mymalloc_infos(char *str){
-	if(str) printf("**************** %s ****************\n",str);
+	// if(str) printf("**************** %s ****************\n",str);
 
-	printf( "# allocs = %3d - # deallocs = %3d - # sbrk = %3d\n",nb_alloc, nb_dealloc, nb_sbrk);
+	// printf( "# allocs = %3d - # deallocs = %3d - # sbrk = %3d\n",nb_alloc, nb_dealloc, nb_sbrk);
 
-	if (str) printf(stderr, "****************\n\n");
+	// if (str) printf(stderr, "****************\n\n");
+	 if (str) fprintf(stderr, "**********\n*** %s\n", str);
+
+    fprintf(stderr, "# allocs = %3d - # deallocs = %3d - # sbrk = %3d\n",
+        nb_alloc, nb_dealloc, nb_sbrk);
+    /* Ca pourrait être pas mal d'afficher ici les blocs dans la liste libre */
+    if (freelist)
+    {Header iBlock;
+        for (iBlock = freelist; iBlock->info.next!= freelist; iBlock=iBlock->info.next )
+        {
+            fprintf(stderr, "Block @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
+        }
+            fprintf(stderr, "Block @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
+
+    }
 }
 #endif
