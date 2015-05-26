@@ -1,3 +1,4 @@
 *.o
 test-malloc
 test-malloc-eg
+my-mallocsans800.c
