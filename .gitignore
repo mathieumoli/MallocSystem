@@ -1,0 +1,3 @@
+*.o
+test-malloc
+test-malloc-eg
