@@ -35,7 +35,31 @@ void creationHeader(void* adresse,size_t size){
 
 }
 
+void* enleverMeta(void * pointeur){
+	void * adresseSansMeta;
+	adresseSansMeta=HEADER_SIZE+pointeur;
+ 	return adresseSansMeta;
+
+}
+
+void* recupererMeta(void*pointeur){
+	void * adresseMeta;
+	adresseMeta=pointeur-HEADER_SIZE;
+ 	return adresseMeta;
+}
+void * chercherBlocByNext(void * adresseNext){
+	Header header=freelist;
+	void * next= header->info.next;
+	while(next!=adresseNext){
+		header=header->info.next;
+		next=header->info.next;
+	}
+	return header;
+}
+
 void fusionBlocs(){
+
+	
 	Header headerCourant=freelist;
 
 	Header headerSuivant=headerCourant->info.next;
@@ -61,35 +85,42 @@ void fusionBlocs(){
         }while(next!=adFreelist);
 }
 
-void * couper(Header theheader,size_t size){
+void couper(Header theheader,size_t size){
 
-	unsigned int tailleBloc=theheader->info.size;
-	int tailleNouveauBlocVide=tailleBloc-(size+HEADER_SIZE);
-	theheader->info.size=tailleNouveauBlocVide;
-	fprintf(stderr, "Block @0x%d (Nouvelle Size=%d , Ancienne Size=%d, next 0x%d)\n", theheader, theheader->info.size,tailleBloc, theheader->info.next);
+	void * adresseDuBloc=theheader;
+	void * adresseNouveauBloc= adresseDuBloc+size+HEADER_SIZE;
+	unsigned int sizeNewBloc=theheader->info.size-(HEADER_SIZE+size);
+	creationHeader(adresseNouveauBloc,sizeNewBloc);
 
-	//pointeur vers la nouvelle source avec la metadonnée
-	void * adresseHeader=theheader;
-	void * pointeur=adresseHeader+HEADER_SIZE+tailleNouveauBlocVide;
-	creationHeader(pointeur,size);
+	theheader->info.size=size;
+	//fprintf(stderr, "Block @0x%d (Nouvelle Size=%d , Ancienne Size=%d, next 0x%d)\n", theheader, theheader->info.size,tailleDuBloc, theheader->info.next);
+	Header headerPrecedent= chercherBlocByNext(adresseDuBloc);
+	Header nouveauBloc=adresseNouveauBloc;
+	//si l'element etait seul
+	if(headerPrecedent==theheader){
+		nouveauBloc->info.next=adresseNouveauBloc;
+		freelist=nouveauBloc;
+	}else{
+		headerPrecedent->info.next=adresseNouveauBloc;
+	}
+	//si l'element etait le premier mais pas le seul
+	if(adresseDuBloc==freelist){
+				freelist=adresseNouveauBloc;
+				nouveauBloc->info.next=theheader->info.next;
 
-	return pointeur;
-
+	}
 }
 //searchinfreelist renvoie le pointeur de l'emplacement avec le header modifié ou null
 void* searchinfreelist(size_t size){
 
 	void * freeAssezGrand=NULL;
-	Header headerPrecedent=freelist;
+	Header headerPrecedent=chercherBlocByNext(freelist);
 	Header headerCourant=freelist;
 	void * next= headerPrecedent->info.next;
 		//je me positionne : precedent est le dernier, courant est le premier
-	while(next!=freelist){
-		headerPrecedent=headerPrecedent->info.next;
-		next=headerPrecedent->info.next;
-			//printf("je suis passé une fois");
-	}
+	
 	do{
+
 		if(headerCourant->info.size>=size){
 			printf("taille du bloc : %d\n",headerCourant->info.size );
 			printf("taille demandée : %d\n",size );
@@ -98,8 +129,8 @@ void* searchinfreelist(size_t size){
 			// + 2 header je lui donne car sinon le bloc ne sera jamais utilisé et donc inutile
 			if(headerCourant->info.size>=(size+HEADER_SIZE+16)){
 				printf("je decoupe la case est assez grande\n");
-				freeAssezGrand=couper(headerCourant,size);
-				return freeAssezGrand;
+				couper(headerCourant,size);
+				return headerCourant;
 			}
 			else{
 				//cas particulier un seul element juste de la taille 
@@ -115,6 +146,8 @@ void* searchinfreelist(size_t size){
 				}
 				freeAssezGrand=headerCourant;
 				headerPrecedent->info.next=headerCourant->info.next;
+				fprintf(stderr, "Block Alloué sans couper @0x%d (Nouvelle Size=%d , next 0x%d)\n", headerCourant, headerCourant->info.size, headerCourant->info.next);
+
 				return freeAssezGrand;
 			}
 		}
@@ -151,7 +184,6 @@ void* searchinfreelist(size_t size){
 	static void*adressePlaceRes=NULL;
 
  	void *  nouvelleAdresse=NULL;
- 	void * adresseSansMeta=NULL;
  	nb_alloc += 1;
 	//blocs potentiels
  	if(freelist!=NULL){
@@ -160,12 +192,11 @@ void* searchinfreelist(size_t size){
  		void *adresseRecyclage=searchinfreelist(size);
 		//si un emplacement est trouvé
  		if(adresseRecyclage){
- 			adresseSansMeta=HEADER_SIZE+adresseRecyclage;
- 			return adresseSansMeta;
+ 			
+ 			return enleverMeta(adresseRecyclage);
  		}
  		
  	}
-	//a voir avec Mr Tigli*************************
  	if(adressePlaceRes==NULL){
  	//	printf("dans AdressePlaceRes\n" );
  		adressePlaceRes=sbrk(0);
@@ -191,13 +222,6 @@ void* searchinfreelist(size_t size){
  		}
  		nb_sbrk++;
  		placeReserve+=SIZE_FOR_SBRK;
- 	// 	nouvelleAdresse=adressePlaceRes;
- 	// 	creationHeader(nouvelleAdresse,size);
-		// //je me place après tout
- 	// 	adressePlaceRes=sbrk(0);
- 	// 	adresseSansMeta=nouvelleAdresse+HEADER_SIZE;
- 	// 	return adresseSansMeta;
-		//assez de place 
  	}
  		//printf("assez de place\n" );
 
@@ -205,8 +229,8 @@ void* searchinfreelist(size_t size){
  		nouvelleAdresse=adressePlaceRes;
  		creationHeader(nouvelleAdresse,size);
  		adressePlaceRes+=(HEADER_SIZE+size);
- 		adresseSansMeta=nouvelleAdresse+HEADER_SIZE;
- 		return adresseSansMeta;
+ 		
+ 		return enleverMeta(nouvelleAdresse);
 
  	
  }
@@ -229,6 +253,8 @@ void* searchinfreelist(size_t size){
  {
  	nb_dealloc += 1;
  	Header aLiberer = ptr-HEADER_SIZE;
+ 	fprintf(stderr, "Block Liberé @0x%d (size=%d, next 0x%d)\n", aLiberer, aLiberer->info.size, aLiberer->info.next);
+
 	//premier free
  	if(freelist==NULL){
  		freelist=aLiberer;
@@ -247,13 +273,8 @@ void* searchinfreelist(size_t size){
  			if(headerCourant->info.next==headerCourant){
  				headerCourant->info.next=freelist;
  			}else{
- 			Header headerPrecedent=headerCourant;
- 			void * next= headerPrecedent->info.next;
+ 			Header headerPrecedent=chercherBlocByNext(headerCourant);
  			
- 		while(next!=headerCourant){
-		headerPrecedent=headerPrecedent->info.next;
-		next=headerPrecedent->info.next;
-		}
 
 		headerPrecedent->info.next=freelist;
 		}
@@ -272,7 +293,7 @@ void* searchinfreelist(size_t size){
 				headerCourant=headerSuivant;
 				headerSuivant=headerSuivant->info.next;
 			}
-			
+
 		}while(headerSuivant!=freelist);
 
 		//si c'est a NULL c'est qu'on a fait le while 
@@ -355,9 +376,10 @@ void mymalloc_infos(char *str){
     {Header iBlock;
         for (iBlock = freelist; iBlock->info.next!= freelist; iBlock=iBlock->info.next )
         {
-            fprintf(stderr, "Block @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
+                   //     fprintf(stderr, "Freelist @0x%d \n",freelist);
+            fprintf(stderr, "Block Restant @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
         }
-            fprintf(stderr, "Block @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
+		            fprintf(stderr, "Block Restant @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
 
     }
 }
