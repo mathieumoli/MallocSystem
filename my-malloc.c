@@ -38,14 +38,14 @@ void creationHeader(void* adresse,size_t size){
 void* enleverMeta(void * pointeur){
 	void * adresseSansMeta;
 	adresseSansMeta=HEADER_SIZE+pointeur;
- 	return adresseSansMeta;
+	return adresseSansMeta;
 
 }
 
 void* recupererMeta(void*pointeur){
 	void * adresseMeta;
 	adresseMeta=pointeur-HEADER_SIZE;
- 	return adresseMeta;
+	return adresseMeta;
 }
 void * chercherBlocByNext(void * adresseNext){
 	Header header=freelist;
@@ -57,32 +57,21 @@ void * chercherBlocByNext(void * adresseNext){
 	return header;
 }
 
-void fusionBlocs(){
-
+bool fusionBlocs(Header premier,Header plusGrand){
 	
-	Header headerCourant=freelist;
+	bool fusion=false;
+	void * adressePremier=premier;
+	void * adressePlusGrande=plusGrand;
+	if((adressePremier+HEADER_SIZE+premier->info.size)==adressePlusGrande){
+		fprintf(stderr, "Block a fusionné premier: @0x%d (size=%d, next 0x%d)\n", adressePremier, premier->info.size, premier->info.next);
+		fprintf(stderr, "Block a fusionné plusGrand: @0x%d (size=%d, next 0x%d)\n", adressePlusGrande, plusGrand->info.size, plusGrand->info.next);
 
-	Header headerSuivant=headerCourant->info.next;
-	void * adresseCourant;
-	void * adFreelist=freelist;
-	 			void * next;
-
-	do{
-                adresseCourant = headerCourant;
-                while((adresseCourant+HEADER_SIZE+headerCourant->info.size)==headerSuivant){
-                        headerCourant->info.size+=HEADER_SIZE+headerSuivant->info.size;
-                        headerCourant->info.next=headerSuivant->info.next;
-                        headerSuivant=headerSuivant->info.next;
-                        //printf("into the while %d",headerCourant->info.size);
-                }
-                headerCourant=headerSuivant;
-          //fprintf(stderr, "Block @0x%d (size=%d, next 0x%d)\n", headerCourant, headerCourant->info.size, headerCourant->info.next);
-          //fprintf(stderr, "Freelist @0x%d\n", freelist);
-
-                headerSuivant=headerSuivant->info.next;
-                next=headerCourant->info.next;
-                
-        }while(next!=adFreelist);
+		premier->info.size+=HEADER_SIZE+plusGrand->info.size;
+		premier->info.next=plusGrand->info.next;
+ 		fusion=true;
+ 		fprintf(stderr, "Block fusionné @0x%d (size=%d, next 0x%d)\n", premier, premier->info.size, premier->info.next);
+	}
+	return fusion;
 }
 
 void couper(Header theheader,size_t size){
@@ -105,8 +94,8 @@ void couper(Header theheader,size_t size){
 	}
 	//si l'element etait le premier mais pas le seul
 	if(adresseDuBloc==freelist){
-				freelist=adresseNouveauBloc;
-				nouveauBloc->info.next=theheader->info.next;
+		freelist=adresseNouveauBloc;
+		nouveauBloc->info.next=theheader->info.next;
 
 	}
 }
@@ -181,7 +170,7 @@ void* searchinfreelist(size_t size){
  void *mymalloc(size_t size)
  {
  	static int placeReserve=0;
-	static void*adressePlaceRes=NULL;
+ 	static void*adressePlaceRes=NULL;
 
  	void *  nouvelleAdresse=NULL;
  	nb_alloc += 1;
@@ -215,7 +204,7 @@ void* searchinfreelist(size_t size){
  		//printf("pas assez de place\n" );
 
  		if(sbrk(SIZE_FOR_SBRK) ==((void*)-1)){
- 			 printf("second sbrk mort");
+ 			printf("second sbrk mort");
 
 		// on renvoit un NULL
  			return NULL;
@@ -225,12 +214,12 @@ void* searchinfreelist(size_t size){
  	}
  		//printf("assez de place\n" );
 
- 		placeReserve-=(HEADER_SIZE+size);
- 		nouvelleAdresse=adressePlaceRes;
- 		creationHeader(nouvelleAdresse,size);
- 		adressePlaceRes+=(HEADER_SIZE+size);
- 		
- 		return enleverMeta(nouvelleAdresse);
+ 	placeReserve-=(HEADER_SIZE+size);
+ 	nouvelleAdresse=adressePlaceRes;
+ 	creationHeader(nouvelleAdresse,size);
+ 	adressePlaceRes+=(HEADER_SIZE+size);
+
+ 	return enleverMeta(nouvelleAdresse);
 
  	
  }
@@ -273,21 +262,27 @@ void* searchinfreelist(size_t size){
  			if(headerCourant->info.next==headerCourant){
  				headerCourant->info.next=freelist;
  			}else{
- 			Header headerPrecedent=chercherBlocByNext(headerCourant);
- 			
+ 				Header headerPrecedent=chercherBlocByNext(headerCourant);
 
-		headerPrecedent->info.next=freelist;
-		}
 
+ 				headerPrecedent->info.next=freelist;
+ 			}
+
+ 			fusionBlocs(aLiberer,headerCourant);
  		}else{
- 		Header headerSuivant=headerCourant->info.next;
- 		do{
+ 			Header headerSuivant=headerCourant->info.next;
+ 			do{
 			//si on est au bon endroit
- 			if(headerCourant<aLiberer && headerSuivant>aLiberer){
- 				aLiberer->info.next=headerSuivant;
- 				headerCourant->info.next=aLiberer;
+ 				if(headerCourant<aLiberer && headerSuivant>aLiberer){
+ 					aLiberer->info.next=headerSuivant;
+ 					headerCourant->info.next=aLiberer;
 				//printf("je suis entre deux blocs\n");
- 				break;
+ 					if(fusionBlocs(headerCourant,aLiberer)){
+ 						fusionBlocs(headerCourant,headerSuivant);
+ 					}else{
+ 					fusionBlocs(aLiberer,headerSuivant);
+ 					}
+ 					break;
 			}else//on avance dans la liste
 			{
 				headerCourant=headerSuivant;
@@ -301,16 +296,16 @@ void* searchinfreelist(size_t size){
 		if(aLiberer->info.next==NULL){
 			headerCourant->info.next=aLiberer;
 			aLiberer->info.next=freelist;
+			fusionBlocs(headerCourant,aLiberer);
+
 			//printf("je suis le dernier donc je passe pas par la double condition\n");
 
 		}
-}
+	}
 		//verifier pour fusionner les blocs
-		fusionBlocs();
-		Header courant=freelist;
 		//printf("taille du premier bloc:%d\n",courant->info.size);
 
-	}
+}
 	//if(aLiberer->info.next==freelist)
 			//printf("j'ai la freelist en next");
 }
@@ -367,20 +362,20 @@ void mymalloc_infos(char *str){
 	// printf( "# allocs = %3d - # deallocs = %3d - # sbrk = %3d\n",nb_alloc, nb_dealloc, nb_sbrk);
 
 	// if (str) printf(stderr, "****************\n\n");
-	 if (str) fprintf(stderr, "**********\n*** %s\n", str);
+	if (str) fprintf(stderr, "**********\n*** %s\n", str);
 
-    fprintf(stderr, "# allocs = %3d - # deallocs = %3d - # sbrk = %3d\n",
-        nb_alloc, nb_dealloc, nb_sbrk);
+	fprintf(stderr, "# allocs = %3d - # deallocs = %3d - # sbrk = %3d\n",
+		nb_alloc, nb_dealloc, nb_sbrk);
     /* Ca pourrait être pas mal d'afficher ici les blocs dans la liste libre */
-    if (freelist)
-    {Header iBlock;
-        for (iBlock = freelist; iBlock->info.next!= freelist; iBlock=iBlock->info.next )
-        {
+	if (freelist)
+		{Header iBlock;
+			for (iBlock = freelist; iBlock->info.next!= freelist; iBlock=iBlock->info.next )
+			{
                    //     fprintf(stderr, "Freelist @0x%d \n",freelist);
-            fprintf(stderr, "Block Restant @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
-        }
-		            fprintf(stderr, "Block Restant @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
+				fprintf(stderr, "Block Restant @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
+			}
+			fprintf(stderr, "Block Restant @0x%d (size=%d, next 0x%d)\n", iBlock, iBlock->info.size, iBlock->info.next);
 
-    }
-}
+		}
+	}
 #endif
