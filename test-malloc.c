@@ -36,14 +36,14 @@ void do_alloc_free(int n, int max) {
   
   /* boucle de libération de la mémoire:  */
   /*      - Etape 1: on libère un élément sur deux, histoire de morceler la mémoire */
-  for (i = 0; i <n; i +=1) {
+  for (i = 0; i <n; i +=2) {
     if (tab[i] != NULL) {
 myfree(tab[i]);
 } }
   mymalloc_infos("AFTER DESALLOC 1/2");
 
   /*      - Etape 2: on alloue dans les nouveaux trous */
-  for (i = 0; i < n; i += 1) {
+  for (i = 0; i < n; i += 2) {
     int size = rand() % max;	/* tirer un nombre dans l'intervalle [0, max-1] */
     tab[i] = mymalloc(size);
 	
