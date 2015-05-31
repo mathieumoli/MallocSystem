@@ -25,8 +25,11 @@ typedef union header {
 
 static void*freelist = NULL;
 
-
-
+/**
+*Creer la metadonnee d'un block
+* adresse, le pointeur vers l'adresse ou initialiser la metadonnée,
+* size, la taille du block a allouer
+*/
 void creationHeader(void* adresse,size_t size){
 	Header newBlock=adresse;
 	newBlock->info.size=size;
@@ -35,6 +38,10 @@ void creationHeader(void* adresse,size_t size){
 
 }
 
+/**
+* Recuperer un pointeur sur un block 
+* à partir du pointeur sur sa metadonnée
+*/
 void* enleverMeta(void * pointeur){
 	void * adresseSansMeta;
 	adresseSansMeta=HEADER_SIZE+pointeur;
@@ -42,11 +49,22 @@ void* enleverMeta(void * pointeur){
 
 }
 
+/**
+* Recuperer la métadonnée d'un block 
+* à partir de son pointeur
+*/
 void* recupererMeta(void*pointeur){
 	void * adresseMeta;
 	adresseMeta=pointeur-HEADER_SIZE;
 	return adresseMeta;
 }
+
+/**
+* Pour obtenir le block precedent à un bloc 
+* adresseNext est l'adresse qui doit être 
+* stocké dans la valeur next du suivant
+*
+*/
 void * chercherBlocByNext(void * adresseNext){
 	Header header=adresseNext;
 	void * next= header->info.next;
@@ -57,22 +75,23 @@ void * chercherBlocByNext(void * adresseNext){
 	return header;
 }
 
+/** Permet de fusionner deux blocs 
+* le premier parametre possède l'adresse la plus petite,
+* le second l'adresse la plus grande
+*/
 bool fusionBlocs(Header premier,Header plusGrand){
 
 	bool fusion=false;
 	void * adressePremier=premier;
 	void * adressePlusGrande=plusGrand;
 	if((adressePremier+HEADER_SIZE+premier->info.size)==adressePlusGrande){
-		fprintf(stderr, "Block a fusionné premier: @0x%d (size=%d, next 0x%d)\n", adressePremier, premier->info.size, premier->info.next);
-		fprintf(stderr, "Block a fusionné plusGrand: @0x%d (size=%d, next 0x%d)\n", adressePlusGrande, plusGrand->info.size, plusGrand->info.next);
-
 		premier->info.size+=HEADER_SIZE+plusGrand->info.size;
 		if(plusGrand->info.next!=NULL){
 			premier->info.next=plusGrand->info.next;
 
 		}
 		fusion=true;
-		fprintf(stderr, "Block fusionné @0x%d (size=%d, next 0x%d)\n", premier, premier->info.size, premier->info.next);
+		fprintf(stderr, "Block fusionné @0x%d (size=%d, next 0x%d) avec @0x%d \n", premier, premier->info.size, premier->info.next,plusGrand);
 	}
 	return fusion;
 }
@@ -85,7 +104,6 @@ void couper(Header theheader,size_t size){
 	creationHeader(adresseNouveauBloc,sizeNewBloc);
 
 	theheader->info.size=size;
-	//fprintf(stderr, "Block @0x%d (Nouvelle Size=%d , Ancienne Size=%d, next 0x%d)\n", theheader, theheader->info.size,tailleDuBloc, theheader->info.next);
 	Header headerPrecedent= chercherBlocByNext(adresseDuBloc);
 	Header nouveauBloc=adresseNouveauBloc;
 	nouveauBloc->info.next=theheader->info.next;
@@ -104,7 +122,10 @@ void couper(Header theheader,size_t size){
 
 	}
 }
-	//searchinfreelist renvoie le pointeur de l'emplacement avec le header modifié ou null
+/**
+*searchinfreelist renvoie le pointeur de 
+*l'emplacement avec le header modifié ou null
+*/
 void* searchinfreelist(size_t size){
 
 	void * freeAssezGrand=NULL;
@@ -120,21 +141,20 @@ void* searchinfreelist(size_t size){
 			printf("taille demandée : %d\n",size );
 
 	// je considere que si la taille n'est pas superieur à la taille demandée
-	// + 2 header je lui donne car sinon le bloc ne sera jamais utilisé et donc inutile
+	// + 1 header + 16 je lui donne car sinon le bloc ne sera jamais utilisé et donc inutile
 			if(headerCourant->info.size>=(size+HEADER_SIZE+16)){
 				printf("je decoupe la case est assez grande\n");
 				couper(headerCourant,size);
 				return headerCourant;
 			}
 			else{
-	//cas particulier un seul element juste de la taille 
-	//la freeliste passe a NULL
+				//cas particulier un seul element juste de la taille 
+				//la freeliste passe a NULL
 				if(headerCourant==freelist && headerCourant->info.next==freelist)
 				{
 					freelist=NULL;
 				}
-	//printf("je suis de la bonne taille");
-	//je change freelist
+				//je change freelist
 				if(freelist==headerCourant){
 					freelist=headerCourant->info.next;
 				}
@@ -145,10 +165,8 @@ void* searchinfreelist(size_t size){
 				return freeAssezGrand;
 			}
 		}
-	//printf("courant trop petit");
 		headerPrecedent=headerCourant;
 		headerCourant=headerCourant->info.next;
-	//tant que j'ai pas fait un tour complet
 	}while (headerCourant!=freelist);
 
 
@@ -179,12 +197,10 @@ void* searchinfreelist(size_t size){
 
 		void *  nouvelleAdresse=NULL;
 		nb_alloc += 1;
-	//blocs potentiels
+		//blocs potentiels
 		if(freelist!=NULL){
-	//printf("freelist vaut %s\n", (char *)freelist);
-	//searchinfreelist renvoie le pointeur de l'emplacement avec le header modifié ou null
 			void *adresseRecyclage=searchinfreelist(size);
-	//si un emplacement est trouvé
+			//si un emplacement est trouvé
 			if(adresseRecyclage){
 
 				return enleverMeta(adresseRecyclage);
@@ -192,32 +208,29 @@ void* searchinfreelist(size_t size){
 
 		}
 		if(adressePlaceRes==NULL){
-	//	printf("dans AdressePlaceRes\n" );
 			adressePlaceRes=sbrk(0);
 			if(sbrk(SIZE_FOR_SBRK) ==((void*)-1)){
-	// on renvoit un NULL
 				printf("premier sbrk mort");
 				return NULL;
 			}
-
+			printf("sbrk(800)\n");
 			nb_sbrk++;
 			placeReserve=SIZE_FOR_SBRK;
 		}
-	//	printf("je passe dans un second implement\n" );
-	// pas assez de place un sbrk a faire
+
+		// pas assez de place un sbrk a faire
 		if(placeReserve<(HEADER_SIZE+size)){
-	//printf("pas assez de place\n" );
+		do{
 
 			if(sbrk(SIZE_FOR_SBRK) ==((void*)-1)){
 				printf("second sbrk mort");
-
-	// on renvoit un NULL
 				return NULL;
 			}
+			printf("sbrk(800)\n");
 			nb_sbrk++;
 			placeReserve+=SIZE_FOR_SBRK;
+		}while(placeReserve<HEADER_SIZE+size);
 		}
-	//printf("assez de place\n" );
 
 		placeReserve-=(HEADER_SIZE+size);
 		nouvelleAdresse=adressePlaceRes;
@@ -252,7 +265,7 @@ void* searchinfreelist(size_t size){
 		fprintf(stderr, "Block Liberé @0x%d (size=%d, next 0x%d)\n", aLiberer, aLiberer->info.size, aLiberer->info.next);
 		Header headerCourant;
 		Header headerSuivant;
-	//premier free
+		//premier free
 		if(!freelist){
 			printf("freelist null");
 			freelist=aLiberer;
@@ -260,28 +273,26 @@ void* searchinfreelist(size_t size){
 			add=true;
 		}else{
 			headerCourant=freelist;
+			//aLiberer prend la place de la freelist
 			if(aLiberer<headerCourant){
-			printf("je suis plus petit que le freelist");
 				freelist=aLiberer;
 				aLiberer->info.next=headerCourant;
+				//un seul element dans la freelist
 				if(headerCourant->info.next==headerCourant){
-				printf("un seul element");
-
 				headerCourant->info.next=aLiberer;
 				}else{
-					printf("plusieurs elements");
-
+					// changement du block next du precedent
 					Header precedent=chercherBlocByNext(headerCourant);
 					precedent->info.next=aLiberer;
 				}
-				mymalloc_infos("dat");
+				//on essaye de fusionner les blocks
 				fusionBlocs(aLiberer,headerCourant);
 				add=true;
 			}else{
 			headerSuivant=headerCourant->info.next;
 			do{
+				//on trouve l'emplacement entre deux blocks
 				if(headerCourant<aLiberer && aLiberer<headerSuivant){
-					printf("entre deux");
 
 					if(fusionBlocs(headerCourant,aLiberer)){
 						fusionBlocs(headerCourant,headerSuivant);
@@ -301,7 +312,7 @@ void* searchinfreelist(size_t size){
 			}while(headerSuivant!=freelist);
 			}
 		}
-	
+		//si add false rajouter à la fin
 		if(!add){
 			if(!fusionBlocs(headerCourant,aLiberer)){
 				headerCourant->info.next=aLiberer;
@@ -354,8 +365,32 @@ void* searchinfreelist(size_t size){
 		else {
 			if(size==0)
 			{
-				myfree(ptr);
-			}
+				return myfree(ptr);
+			}else{
+        Header Block = getHeader(ptr);
+        if (Block->info.size<size)// on se deplace
+        {                                   
+            myfree(ptr);
+            void *newData = mymalloc(size);        
+            memcpy(newData, ptr, size);
+            return newData;
+        }
+        else // Taille voulu <= à la précédente 
+        	//on casse le block si on peut creer deux headers en plus
+        {
+        	if(Block->info.size<(size+2*HEADER_SIZE)){
+            return ptr;
+        	}
+        	else{
+        		couper(Block,size);
+        		return Block;
+        	}
+        }
+    }
+    else
+    {
+        return mymalloc(alignedSize); // Si ptr == null => malloc
+    }}
 		}
 		return NULL;
 	}
