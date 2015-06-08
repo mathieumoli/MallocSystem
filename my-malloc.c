@@ -365,9 +365,10 @@ void* searchinfreelist(size_t size){
 		else {
 			if(size==0)
 			{
-				return myfree(ptr);
+				myfree(ptr);
+				return NULL;
 			}else{
-        Header Block = getHeader(ptr);
+        Header Block = ptr - HEADER_SIZE;
         if (Block->info.size<size)// on se deplace
         {                                   
             myfree(ptr);
@@ -387,11 +388,8 @@ void* searchinfreelist(size_t size){
         	}
         }
     }
-    else
-    {
-        return mymalloc(alignedSize); // Si ptr == null => malloc
-    }}
-		}
+	}
+		
 		return NULL;
 	}
 
