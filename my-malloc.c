@@ -6,7 +6,8 @@
 	#include "my-malloc.h"
 
 	#define MOST_RESTRICTING_TYPE double
-	#define SIZE_FOR_SBRK 800 
+	#define SIZE_FOR_SBRK 800
+	#define align8(x) ((((x-1)>>3)<<3)+8)
 
 	// la taille est 16
 	#define HEADER_SIZE sizeof(union header)
@@ -358,43 +359,44 @@ void* searchinfreelist(size_t size){
 	* Si la zone pointée était déplacée, un free(ptr) est effectué.   
 	*/
 	void *myrealloc(void *ptr, size_t size)
-	{
+	{	
+		size_t alignedSize = align8(size);
 		if (!ptr) {
 			return (mymalloc(size));
 		}
 		else {
-			if(size==0)
-			{
-				myfree(ptr);
-				return NULL;
-			}else{
-        Header Block = ptr - HEADER_SIZE;
-        if (Block->info.size<size)// on se deplace
-        {                                   
-            myfree(ptr);
-            void *newData = mymalloc(size);        
-            memcpy(newData, ptr, size);
-            return newData;
-        }
-        else // Taille voulu <= à la précédente 
-        	//on casse le block si on peut creer deux headers en plus
-        {
-        	if(Block->info.size<(size+2*HEADER_SIZE)){
-            return ptr;
-        	}
-        	else{
-        		couper(Block,size);
-        		return Block;
-        	}
-        }
-    }
+				if(size==0)
+				{
+					myfree(ptr);
+					return NULL;
+				}else{
+			        Header Block = ptr - HEADER_SIZE;
+			        if (Block->info.size < alignedSize)// on se deplace
+			        {                                   
+			            size_t old = Block->info.size;
+			            myfree(ptr);
+			            void *newData = mymalloc(alignedSize);        
+			            memcpy(newData, ptr, old);
+			            return newData;
+			        }
+			        else // Taille voulu <= à la précédente 
+			        	//on casse le block si on peut creer deux headers en plus
+			        {
+			        	if(Block->info.size<(alignedSize+2*HEADER_SIZE)){
+			            return ptr;
+			        	}
+			        	else{
+			        		couper(Block,alignedSize);
+			        		return Block;
+			        	}
+			        }
+	   		}
 	}
 		
 		return NULL;
 	}
-
-	#ifdef MALLOC_DBG
-	void mymalloc_infos(char *str){
+#ifdef MALLOC_DBG
+void mymalloc_infos(char *str){
 
 		if(str) printf("\n**************** %s ****************\n\n",str);
 
@@ -417,4 +419,4 @@ void* searchinfreelist(size_t size){
 		
 		//}
 	}
-	#endif
+#endif
